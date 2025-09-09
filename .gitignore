@@ -41,3 +41,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Service account credentials and secrets
+*.json
+photon-services-*.json
+**/photon-services-*.json
