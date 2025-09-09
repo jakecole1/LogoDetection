@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""
-Simple test script for logo detection system using Test_artworks and labels as ground truth.
-
-This is a simplified version that focuses on the core testing functionality.
-"""
-
 import os
 import json
 import glob
@@ -144,8 +137,8 @@ def test_single_artwork(artwork_file: str, ground_truth_logos: List[str]) -> Dic
         reference_logo_file="reference_pdf_loreal.pdf",
         model="gemini-2.5-pro",
         system_prompt="You are a helpful assistant that can match reference logos to images.",
-        k=15,  # Top 15 matches from embedding comparison
-        n=5    # Top 5 matches after ORB filtering
+        k=5,
+        n=15
     )
     
     try:

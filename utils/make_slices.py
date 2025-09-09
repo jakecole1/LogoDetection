@@ -14,10 +14,14 @@ class MakeSlices:
         self.stride = stride
     
 
-    def create_nxn_blocks(self, file_path: str, output_folder_path: str, block_size: int = 500, zoom_factor: float = 1.0):
+    def create_nxn_blocks(self, file_path: str, output_folder_path: str, block_size: int = None, zoom_factor: float = 1.0, grid_size: int = 5, use_stride: bool = True):
         """
-        Cut the PDF into 100x100 pixel blocks or smaller if there is excess.
+        Cut the PDF into nxn grid blocks. If block_size is provided, use it directly.
+        If block_size is None, calculate it dynamically based on PDF dimensions and grid_size.
         Each block will be saved as a separate image file.
+        
+        Args:
+            use_stride: If True, use striding (overlapping blocks). If False, use regular grid.
         """
         doc = fitz.open(file_path)
         slice_metadata = {}
@@ -27,21 +31,54 @@ class MakeSlices:
         page = doc.load_page(0)
         pw, ph = page.rect.width, page.rect.height
         
-        # Calculate number of blocks needed
-        blocks_x = int(pw // block_size) + (1 if pw % block_size > 0 else 0)
-        blocks_y = int(ph // block_size) + (1 if ph % block_size > 0 else 0)
+        # Calculate block size dynamically if not provided
+        if block_size is None:
+            # Calculate block size to create a grid_size x grid_size grid
+            block_size_x = pw / grid_size
+            block_size_y = ph / grid_size
+            # Use the smaller dimension to ensure we don't exceed page bounds
+            block_size = min(block_size_x, block_size_y)
+            logger.info(f"Calculated dynamic block size: {block_size:.2f} pixels for {grid_size}x{grid_size} grid")
         
-        logger.info(f"Creating {blocks_x}x{blocks_y} blocks of size {block_size}x{block_size} pixels")
+        if use_stride:
+            # Use striding approach
+            stride_x = self.stride
+            stride_y = self.stride
+            
+            # Calculate number of blocks needed with striding
+            blocks_x = int((pw - block_size) // stride_x) + 1
+            blocks_y = int((ph - block_size) // stride_y) + 1
+            
+            logger.info(f"Creating {blocks_x}x{blocks_y} overlapping blocks with stride {stride_x}x{stride_y}")
+        else:
+            # Use regular grid approach (original behavior)
+            blocks_x = int(pw // block_size) + (1 if pw % block_size > 0 else 0)
+            blocks_y = int(ph // block_size) + (1 if ph % block_size > 0 else 0)
+            
+            logger.info(f"Creating {blocks_x}x{blocks_y} non-overlapping blocks")
+        
         logger.info(f"Page dimensions: {pw}x{ph} pixels")
+        logger.info(f"Block size: {block_size}x{block_size} pixels")
         
         block_count = 0
         
         for row in range(blocks_y):
             for col in range(blocks_x):
-                x0 = col * block_size
-                y0 = row * block_size
+                if use_stride:
+                    # Use striding: each block is offset by stride amount
+                    x0 = col * stride_x
+                    y0 = row * stride_y
+                else:
+                    # Use regular grid: each block is adjacent to the next
+                    x0 = col * block_size
+                    y0 = row * block_size
+                
                 x1 = min(x0 + block_size, pw)
                 y1 = min(y0 + block_size, ph)
+                
+                # Skip blocks that are too small (less than 50% of block_size)
+                if (x1 - x0) < block_size * 0.5 or (y1 - y0) < block_size * 0.5:
+                    continue
                 
                 clip_rect = fitz.Rect(x0, y0, x1, y1)
                 
@@ -77,11 +114,13 @@ class MakeSlices:
                     "block_position": {
                         "row": row,
                         "col": col
-                    }
+                    },
+                    "stride_used": use_stride,
+                    "stride_value": self.stride if use_stride else None
                 }
                 
                 block_count += 1
-                logger.info(f"Created block {block_count}/{blocks_x * blocks_y}: {out_path}")
+                logger.info(f"Created block {block_count}: {out_path} at position ({x0}, {y0})")
         
         doc.close()
         logger.info(f"Successfully created {block_count} blocks")
@@ -173,7 +212,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
     # Create 100x100 blocks from the PDF
-    pdf_file = "SKUR-AWK-2502-00249_8005164-1_Coca-Cola_Coca-Cola Zero Caffeine free_CCZCF_Can Slim_200ml_25-0042-FR_FRA_samplingminica_Ardagh_CCEP.pdf"
+    pdf_file = "Test_artworks/a9.pdf"
     output_folder = "output"
     
     # Create MakeSlices instance and generate blocks
@@ -181,8 +220,10 @@ if __name__ == "__main__":
     metadata = slicer.create_nxn_blocks(
         file_path=pdf_file,
         output_folder_path=output_folder,
-        block_size=500,
-        zoom_factor=2.0
+        block_size=None,  # Use dynamic sizing
+        zoom_factor=2.0,
+        grid_size=5,  # 5x5 grid
+        use_stride=True  # Enable striding
     )
     
     print(f"Generated {len(metadata)} blocks")

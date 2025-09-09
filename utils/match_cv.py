@@ -21,15 +21,15 @@ def match_cv(State: State) -> State:
         State: Updated state with top_n_results (or unchanged if n not set)
     """
     # Check if n is set - if not, skip ORB matching
-    if State.n is None:
-        print("ORB matching skipped: n not set in state. Passing through top_k_results as top_n_results.")
+    if State.k is None:
+        print("ORB matching skipped: k not set in state. Passing through top_n_results as top_k_results.")
         return {"top_n_results": State.top_k_results}
     
-    print(f"Starting ORB matching to filter top_k_results to top_n_results (n={State.n})...")
+    print(f"Starting ORB matching to filter top_n_results to top_k_results (k={State.k})...")
     
     # Check if top_k_results is available
-    if State.top_k_results is None:
-        raise ValueError("top_k_results not found in state. Make sure embedding_comparison runs before match_cv.")
+    if State.top_n_results is None:
+        raise ValueError("top_n_results not found in state. Make sure embedding_comparison runs before match_cv.")
     
     # Initialize ORB detector
     orb = cv2.ORB_create(nfeatures=1000)
@@ -43,12 +43,12 @@ def match_cv(State: State) -> State:
     search_params = dict(checks=50)
     flann = cv2.FlannBasedMatcher(index_params, search_params)
     
-    top_n_results = []
-    n = int(State.k)
+    top_k_results = []
+    k = int(State.k)
     
-    print(f"Processing {len(State.top_k_results)} logos with ORB matching...")
+    print(f"Processing {len(State.top_n_results)} logos with ORB matching...")
     
-    for logo_result in State.top_k_results:
+    for logo_result in State.top_n_results:
         logo_file = logo_result['logo_file']
         logo_matches = logo_result['top_matches']
         
@@ -90,6 +90,7 @@ def match_cv(State: State) -> State:
                 # Not enough features, use original similarity score
                 match['orb_score'] = 0.0
                 match['orb_matches_count'] = 0
+                match['combined_score'] = match['similarity_score']
                 scored_matches.append(match)
                 continue
             
@@ -136,24 +137,24 @@ def match_cv(State: State) -> State:
         scored_matches.sort(key=lambda x: x['combined_score'], reverse=True)
         
         # Ensure n is a valid integer and within bounds
-        n_safe = min(int(n), len(scored_matches))
-        top_n_matches = scored_matches[:n_safe]
+        k_safe = min(int(k), len(scored_matches))
+        top_k_matches = scored_matches[:k_safe]
         
         # Create result for this logo
         logo_result_filtered = {
             "logo_index": logo_result['logo_index'],
             "logo_file": logo_result['logo_file'],
-            "top_matches": top_n_matches
+            "top_matches": top_k_matches
         }
         
-        top_n_results.append(logo_result_filtered)
+        top_k_results.append(logo_result_filtered)  
         
-        print(f"Logo {logo_result['logo_index']}: {len(scored_matches)} candidates -> {len(top_n_matches)} top matches")
+        print(f"Logo {logo_result['logo_index']}: {len(scored_matches)} candidates -> {len(top_k_matches)} top matches")
     
-    print(f"ORB matching completed. Filtered to top {n} results for {len(top_n_results)} logos.")
+    print(f"ORB matching completed. Filtered to top {k} results for {len(top_k_results)} logos.")
     
     return {
-        "top_n_results": top_n_results
+        "top_k_results": top_k_results
     }
 
 

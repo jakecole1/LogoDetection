@@ -17,15 +17,16 @@ from vertexai.generative_models import Part
 
 def load_and_slice(State: State) -> State:
     """
-    Load the images and slice them
+    Load the images and slice them into a nxn grid
     """
     print(f"Loading and slicing artwork: {State.artwork_file}")
-    slicer = MakeSlices(client_name="")
+    slicer = MakeSlices(client_name="", stride=250)
     metadata = slicer.create_nxn_blocks(
         file_path=State.artwork_file,
         output_folder_path=State.artwork_slices_folder,
-        block_size=500,
-        zoom_factor=2.0
+        block_size=None,  # Let it calculate dynamically
+        zoom_factor=1.5,
+        grid_size=3 
     )
     print(f"Created {len(metadata)} slices in {State.artwork_slices_folder}")
     return {"artwork_slices_folder": State.artwork_slices_folder}
@@ -98,7 +99,7 @@ def embedding_comparison(State: State) -> State:
     S = cosine_similarity(logos_mat, artwork_mat)  # (num_logos, num_slices)
 
     # Get top N logos overall with 1-2 matches each
-    n = getattr(State, "n", 5)  # Default to top 5 logos
+    n = getattr(State, "n", 5)
     max_matches_per_logo = getattr(State, "max_matches_per_logo", 2)  # Default to 2 matches per logo
     
     # Find the best match for each logo
@@ -117,7 +118,7 @@ def embedding_comparison(State: State) -> State:
     logo_best_scores.sort(key=lambda x: x["best_score"], reverse=True)
     top_n_logos = logo_best_scores[:n]
     
-    top_k_results = []
+    top_n_results = []
     for logo_info in top_n_logos:
         li = logo_info["logo_index"]
         sims = S[li]
@@ -136,7 +137,7 @@ def embedding_comparison(State: State) -> State:
                 "similarity_score": float(sims[ai]),
                 "rank": rank,
             })
-        top_k_results.append({
+        top_n_results.append({
             "logo_index": int(li),
             "logo_file": logo_meta[li],
             "top_matches": matches
@@ -147,7 +148,7 @@ def embedding_comparison(State: State) -> State:
     return {
         "logos_embeddings": logos_mat,                 # shape (L, 1408)
         "artwork_slices_embeddings": artwork_mat,      # shape (A, 1408)
-        "top_k_results": top_k_results
+        "top_n_results": top_n_results
     }       
 
 def reference_logos(State: State) -> State:
@@ -310,7 +311,22 @@ def llm_only_graph(state_instance: State):
 
 if __name__ == "__main__":
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "photon-services-f0d3ec1417d0.json"
-    state_instance = State(artwork_file=r"Test_artworks\a9.pdf", artwork_slices_folder="artwork_slices", reference_logo_file="reference_pdf_loreal.pdf", model="gemini-2.5-pro", system_prompt="You are a helpful assistant that can match reference logos to images.")
-    #app = llm_only_graph(state_instance)
-    app = build_graph(state_instance)
+
+    state_instance = State(artwork_file=r"Test_artworks\a2.pdf.png", 
+    artwork_slices_folder="artwork_slices", 
+    reference_logo_file="reference_pdf_loreal.pdf", 
+    model="gemini-2.5-pro", 
+    system_prompt="You are a helpful assistant that can match reference logos to images.",
+    n=15,
+    k=5,
+    max_matches_per_logo=2
+    )
+
+    # FOR EMBEDDING COMPARISON
+    # app = build_graph(state_instance)
+
+    
+    # FOR LLM ONLY
+    app = llm_only_graph(state_instance)
+    
     result = app.invoke(state_instance)
